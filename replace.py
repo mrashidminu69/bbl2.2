@@ -1,5 +1,5 @@
 import UnityPy, os, sys, re, zipfile
-from PIL import Image
+from PIL import Image, ImageChops
 
 src_obb, repl_dir = sys.argv[1], sys.argv[2]
 work, tmp = "obb_unzipped", "merged_tmp"
@@ -17,6 +17,7 @@ print("replacement images:", len(repl))
 
 with zipfile.ZipFile(src_obb) as z:
     order = [i.filename for i in z.infolist() if not i.is_dir()]
+    ctype = {i.filename: i.compress_type for i in z.infolist() if not i.is_dir()}
     z.extractall(work)
 
 pat = re.compile(r"^(.*)\.split(\d+)$")
@@ -47,7 +48,14 @@ def process(path):
             data = obj.read()
             key = f"{data.m_Name}_{obj.path_id}"
             if key in repl:
-                data.image = Image.open(repl[key]).convert("RGBA")
+                img = Image.open(repl[key]).convert("RGBA")
+                old = data.image.convert("RGBA")
+                if img.size != old.size:
+                    print("size mismatch:", key, img.size, old.size)
+                    continue
+                if ImageChops.difference(img, old).getbbox() is None:
+                    continue
+                data.image = img
                 data.save()
                 changed = True
                 done += 1
@@ -98,5 +106,6 @@ with zipfile.ZipFile(out_obb, "w", zipfile.ZIP_STORED) as zo:
     for n in order + sorted(allp):
         if n in allp and n not in seen:
             seen.add(n)
-            zo.write(os.path.join(work, n), n)
+            zo.write(os.path.join(work, n), n,
+                     compress_type=ctype.get(n, zipfile.ZIP_STORED))
 print("done")
