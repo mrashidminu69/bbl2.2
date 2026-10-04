@@ -76,11 +76,16 @@ if done == 0:
     sys.exit("nothing patched")
 
 if is_zip:
-    with zipfile.ZipFile("out/sharedassets2_patched.zip", "w") as zo:
-        pos = 0
-        for name, d in parts:
-            zo.writestr(name, bytes(buf[pos:pos + len(d)]))
-            pos += len(d)
+    pos = 0
+    changed = []
+    for name, d in parts:
+        chunk = bytes(buf[pos:pos + len(d)])
+        pos += len(d)
+        if chunk != d:
+            base = os.path.basename(name)
+            open(os.path.join("out", base), "wb").write(chunk)
+            changed.append(base)
+    print("changed parts:", changed)
 else:
     open("out/sharedassets2.assets", "wb").write(buf)
 print("done")
