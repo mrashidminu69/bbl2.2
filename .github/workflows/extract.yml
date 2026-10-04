@@ -1,0 +1,19 @@
+name: extract-textures
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install UnityPy pillow gdown
+      - run: |
+          mkdir obb
+          gdown --fuzzy "https://drive.google.com/file/d/1MGxpvepAchNFCzeqj8dFCZDAVclHJm38/view?usp=drivesdk" -O obb/game.obb
+      - run: python extract.py obb/game.obb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: textures
+          path: textures_out
