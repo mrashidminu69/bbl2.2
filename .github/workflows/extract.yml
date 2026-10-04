@@ -11,9 +11,9 @@ jobs:
       - run: pip install UnityPy pillow gdown
       - run: |
           mkdir obb
-          gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb/game.obb
-          ls -lh obb
-      - run: python extract.py obb/game.obb
+          gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb/obb.obb
+          gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O obb/apk.apk
+      - run: python extract.py obb/obb.obb obb/apk.apk
       - uses: actions/upload-artifact@v4
         with:
           name: textures
