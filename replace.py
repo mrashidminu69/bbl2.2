@@ -11,6 +11,7 @@ for root, _, files in os.walk(repl_dir):
     for f in files:
         if f.lower().endswith(".png"):
             repl[os.path.splitext(f)[0]] = os.path.join(root, f)
+ids = {k.rsplit("_", 1)[-1] for k in repl}
 print("replacement images:", len(repl))
 
 with zipfile.ZipFile(src_obb) as z:
@@ -29,16 +30,25 @@ for root, _, files in os.walk(work):
         for obj in env.objects:
             if obj.type.name != "Texture2D":
                 continue
-            data = obj.read()
-            key = f"{data.m_Name}_{obj.path_id}"
-            if key in repl:
-                data.image = Image.open(repl[key]).convert("RGBA")
-                data.save()
-                changed = True
-                done += 1
+            if str(obj.path_id) not in ids:
+                continue
+            try:
+                data = obj.read()
+                key = f"{data.m_Name}_{obj.path_id}"
+                if key in repl:
+                    data.image = Image.open(repl[key]).convert("RGBA")
+                    data.save()
+                    changed = True
+                    done += 1
+            except Exception as e:
+                print("skip:", fn, obj.path_id, e)
         if changed:
-            with open(p, "wb") as f:
-                f.write(env.file.save())
+            try:
+                blob = env.file.save()
+                with open(p, "wb") as f:
+                    f.write(blob)
+            except Exception as e:
+                print("save failed:", fn, e)
 
 print("textures replaced:", done)
 
