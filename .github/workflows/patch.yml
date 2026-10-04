@@ -1,0 +1,21 @@
+name: patch-assets
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install UnityPy pillow gdown
+      - run: |
+          mkdir new
+          gdown 1sPQaJmSvSmN3DnXSAZnVaMPkMQ2n7lpJ -O sa2.bin
+          gdown 1hpWexzHyygOnv8Gl8Id_gAOoaWu_IA0R -O new.zip
+          unzip -q new.zip -d new
+      - run: python patch.py sa2.bin new
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patched-sharedassets2
+          path: out
