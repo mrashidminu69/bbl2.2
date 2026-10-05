@@ -144,7 +144,7 @@ jobs:
           echo "$DUMPER_DLL"
 
 
-      # ==========================================
+            # ==========================================
       # 9. GENERATE DUMP.CS
       # ==========================================
       - name: Generate dump.cs
@@ -157,10 +157,15 @@ jobs:
           echo "       RUNNING IL2CPPDUMPER"
           echo "========================================"
 
-          dotnet "$DUMPER_DLL" \
-            game/libil2cpp.so \
-            game/global-metadata.dat \
-            dumpout
+          sudo apt-get install -y util-linux
+
+          # Il2CppDumper waits for a key at the end.
+          # 'script' gives it a pseudo-terminal so Console.ReadKey()
+          # does not crash inside GitHub Actions.
+
+          script -q -e -c \
+            "dotnet \"$DUMPER_DLL\" game/libil2cpp.so game/global-metadata.dat dumpout" \
+            /dev/null
 
           echo ""
           echo "========================================"
@@ -169,20 +174,18 @@ jobs:
 
           find dumpout -maxdepth 2 -type f -ls
 
+          echo ""
+          echo "Checking dump.cs..."
+
           if [ ! -f dumpout/dump.cs ]; then
             echo ""
             echo "ERROR: dump.cs was not generated."
-
-            echo ""
-            echo "Dump directory:"
-            find dumpout -type f -print
-
             exit 1
           fi
 
           echo ""
-          echo "SUCCESS: dump.cs generated."
-
+          echo "SUCCESS: dump.cs generated!"
+          ls -lh dumpout/dump.cs
 
       # ==========================================
       # 10. SEARCH SCOREBOARD
