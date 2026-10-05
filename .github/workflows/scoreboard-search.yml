@@ -48,20 +48,18 @@ jobs:
           test -f game/global-metadata.dat
 
 
-      # 5. Download Il2CppDumper
-      - name: Download Il2CppDumper
+            - name: Download Il2CppDumper
         run: |
           wget -O Il2CppDumper.zip \
-            "https://github.com/Perfare/Il2CppDumper/releases/latest/download/Il2CppDumper-linux-x64.zip"
+            "https://github.com/Perfare/Il2CppDumper/releases/download/v6.7.46/Il2CppDumper-linux-x64.zip"
 
           mkdir -p Il2CppDumper
 
-          unzip -q Il2CppDumper.zip \
-            -d Il2CppDumper
+          unzip -q Il2CppDumper.zip -d Il2CppDumper
 
           chmod +x Il2CppDumper/Il2CppDumper
 
-          echo "=== IL2CPP DUMPER ==="
+          echo "=== IL2CPP DUMPER FILES ==="
           ls -lh Il2CppDumper/
 
 
