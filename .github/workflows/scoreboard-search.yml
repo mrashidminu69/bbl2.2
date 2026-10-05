@@ -9,22 +9,45 @@ jobs:
 
     steps:
 
+      # ==========================================
+      # 1. CHECKOUT
+      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ==========================================
+      # 2. INSTALL TOOLS
+      # ==========================================
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip wget grep
+          sudo apt-get install -y unzip wget grep jq
 
+
+      # ==========================================
+      # 3. DOWNLOAD ORIGINAL APK
+      # ==========================================
       - name: Download original APK
         run: |
-          wget -O original.apk "https://drive.usercontent.google.com/download?id=1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH&confirm=t"
-          echo "APK downloaded:"
+          set -e
+
+          wget -O original.apk \
+            "https://drive.usercontent.google.com/download?id=1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH&confirm=t"
+
+          echo "=== APK ==="
           ls -lh original.apk
 
+          test -s original.apk
+
+
+      # ==========================================
+      # 4. EXTRACT IL2CPP FILES
+      # ==========================================
       - name: Extract IL2CPP files
         run: |
+          set -e
+
           mkdir -p game
 
           unzip -j original.apk \
@@ -32,48 +55,183 @@ jobs:
             "assets/bin/Data/Managed/Metadata/global-metadata.dat" \
             -d game
 
-          echo "Extracted files:"
+          echo "=== EXTRACTED FILES ==="
           ls -lh game/
 
           test -f game/libil2cpp.so
           test -f game/global-metadata.dat
 
+
+      # ==========================================
+      # 5. DOWNLOAD IL2CPPDUMPER
+      # ==========================================
       - name: Download Il2CppDumper
         run: |
-          wget -O Il2CppDumper.zip \
-            "https://github.com/Perfare/Il2CppDumper/releases/download/v6.7.46/Il2CppDumper-linux-x64.zip"
+          set -e
+
+          API="https://api.github.com/repos/Perfare/Il2CppDumper/releases/latest"
+
+          echo "Getting latest Il2CppDumper release..."
+
+          wget -qO release.json "$API"
+
+          echo "=== RELEASE ==="
+          jq -r '.tag_name' release.json
+
+          echo "=== AVAILABLE ASSETS ==="
+          jq -r '.assets[].name' release.json
 
           mkdir -p Il2CppDumper
 
-          unzip -q Il2CppDumper.zip -d Il2CppDumper
+          # Find a Linux archive automatically.
+          ASSET_URL=$(jq -r '
+            .assets[]
+            | select(
+                (.name | ascii_downcase | contains("linux"))
+                and
+                (
+                  (.name | endswith(".zip"))
+                  or
+                  (.name | endswith(".tar.gz"))
+                )
+              )
+            | .browser_download_url
+          ' release.json | head -n 1)
 
-          chmod +x Il2CppDumper/Il2CppDumper
+          if [ -z "$ASSET_URL" ]; then
+            echo ""
+            echo "ERROR: Linux Il2CppDumper asset was not found."
+            echo ""
+            echo "Available assets:"
+            jq -r '.assets[] | .name + " -> " + .browser_download_url' release.json
+            exit 1
+          fi
 
-          echo "Il2CppDumper files:"
-          ls -lh Il2CppDumper/
+          echo ""
+          echo "Selected asset:"
+          echo "$ASSET_URL"
+          echo ""
 
+          wget -O dumper-package "$ASSET_URL"
+
+          echo "=== DOWNLOADED PACKAGE ==="
+          file dumper-package
+          ls -lh dumper-package
+
+
+      # ==========================================
+      # 6. EXTRACT IL2CPPDUMPER
+      # ==========================================
+      - name: Extract Il2CppDumper
+        run: |
+          set -e
+
+          mkdir -p Il2CppDumper
+
+          if file dumper-package | grep -qi "Zip archive"; then
+
+            echo "ZIP package detected."
+
+            unzip -q dumper-package \
+              -d Il2CppDumper
+
+          elif file dumper-package | grep -qi "gzip compressed"; then
+
+            echo "GZIP package detected."
+
+            tar -xzf dumper-package \
+              -C Il2CppDumper
+
+          else
+
+            echo "Unknown package format:"
+            file dumper-package
+
+            exit 1
+
+          fi
+
+          echo "=== DUMPER CONTENT ==="
+          find Il2CppDumper -maxdepth 3 -type f -print
+
+
+      # ==========================================
+      # 7. FIND DUMPER EXECUTABLE
+      # ==========================================
+      - name: Locate Il2CppDumper executable
+        run: |
+          set -e
+
+          DUMPER=$(find Il2CppDumper \
+            -type f \
+            \( -name "Il2CppDumper" -o -name "Il2CppDumper.exe" \) \
+            | head -n 1)
+
+          if [ -z "$DUMPER" ]; then
+            echo "ERROR: Il2CppDumper executable not found."
+
+            echo "Files found:"
+            find Il2CppDumper -type f
+
+            exit 1
+          fi
+
+          echo "DUMPER=$DUMPER" >> "$GITHUB_ENV"
+
+          chmod +x "$DUMPER" || true
+
+          echo "Using:"
+          echo "$DUMPER"
+
+
+      # ==========================================
+      # 8. GENERATE DUMP
+      # ==========================================
       - name: Generate dump.cs
         run: |
+          set -e
+
           mkdir -p dumpout
 
-          ./Il2CppDumper/Il2CppDumper \
+          echo "Running Il2CppDumper..."
+
+          "$DUMPER" \
             game/libil2cpp.so \
             game/global-metadata.dat \
             dumpout
 
-          echo "Dump files:"
-          ls -lh dumpout/
+          echo ""
+          echo "=== DUMP OUTPUT ==="
+          find dumpout -maxdepth 2 -type f -ls
 
-          test -f dumpout/dump.cs
+          if [ ! -f dumpout/dump.cs ]; then
+            echo ""
+            echo "ERROR: dump.cs was not generated."
 
+            echo ""
+            echo "Dumper output:"
+            find dumpout -type f -print
+
+            exit 1
+          fi
+
+
+      # ==========================================
+      # 9. SEARCH SCOREBOARD
+      # ==========================================
       - name: Search scoreboard
         run: |
+          set -e
+
           echo "========================================" > scoreboard-search.txt
           echo "       MATCH SCOREBOARD SEARCH" >> scoreboard-search.txt
           echo "========================================" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
-          echo "### SCOREBOARD / HUD KEYWORDS ###" >> scoreboard-search.txt
+
+          echo "========================================" >> scoreboard-search.txt
+          echo "1. SCOREBOARD / HUD KEYWORDS" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -81,8 +239,11 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
+
           echo "" >> scoreboard-search.txt
-          echo "### POSSIBLE UI CLASSES ###" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
+          echo "2. POSSIBLE UI CLASSES" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -90,8 +251,11 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
+
           echo "" >> scoreboard-search.txt
-          echo "### SCORE METHODS ###" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
+          echo "3. SCORE METHODS" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -99,8 +263,11 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
+
           echo "" >> scoreboard-search.txt
-          echo "### RUN / WICKET / OVER REFERENCES ###" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
+          echo "4. SCORE / WICKET / OVER REFERENCES" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -108,17 +275,29 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
-          echo "" >> scoreboard-search.txt
-          echo "SEARCH COMPLETE" >> scoreboard-search.txt
 
-      - name: Show search result
+          echo "" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
+          echo "SEARCH COMPLETE" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
+
+
+      # ==========================================
+      # 10. SHOW RESULT
+      # ==========================================
+      - name: Show scoreboard result
         run: |
           echo "========================================"
           echo "       SCOREBOARD SEARCH RESULT"
           echo "========================================"
+
           cat scoreboard-search.txt
 
-      - name: Upload results
+
+      # ==========================================
+      # 11. UPLOAD RESULTS
+      # ==========================================
+      - name: Upload scoreboard results
         uses: actions/upload-artifact@v4
         with:
           name: scoreboard-search
