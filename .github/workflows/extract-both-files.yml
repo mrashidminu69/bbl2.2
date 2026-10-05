@@ -1,0 +1,42 @@
+name: extract-both-files
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install gdown
+
+      - name: Download & Extract Both Asset Files
+        run: |
+          mkdir input out
+          gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O input/original.obb
+          gdown 1bVYc8GTYKo8wzFkh9vXqQyAuDDnFil3Y -O input/HUR_1.txt
+          gdown 10TzP0U8tFzpCUR5NIilzAz90E_ZsckPe -O input/BBL_Bios_1.txt
+          
+          # Run safe patch python script
+          python safe_patch_all.py input/original.obb input/HUR_1.txt input/BBL_Bios_1.txt out/temp.obb
+
+          # Extract both modified container files from new OBB
+          python -c '
+          import zipfile
+          with zipfile.ZipFile("out/temp.obb", "r") as z:
+              for item in z.infolist():
+                  if "182e001bae56bcb419267264cf896a7d" in item.filename:
+                      with open("out/182e001bae56bcb419267264cf896a7d", "wb") as f:
+                          f.write(z.read(item.filename))
+                  elif "301e2e6076b6de344a21203af8dac419" in item.filename:
+                      with open("out/301e2e6076b6de344a21203af8dac419", "wb") as f:
+                          f.write(z.read(item.filename))
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: both-patched-container-files
+          path: |
+            out/182e001bae56bcb419267264cf896a7d
+            out/301e2e6076b6de344a21203af8dac419
+            
