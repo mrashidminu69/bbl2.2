@@ -1,0 +1,27 @@
+name: pack-bios-asset
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install UnityPy gdown
+
+      - name: Download Files
+        run: |
+          mkdir input out
+          gdown 10TzP0U8tFzpCUR5NIilzAz90E_ZsckPe -O input/BBL_Bios_1.txt
+          gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O input/obb.obb
+
+      - name: Pack Single Bios Asset
+        run: |
+          python pack_bios.py input/obb.obb input/BBL_Bios_1.txt out/301e2e6076b6de344a21203af8dac419
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bios-asset-file
+          path: out/301e2e6076b6de344a21203af8dac419
+          
