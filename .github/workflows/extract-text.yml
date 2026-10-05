@@ -1,0 +1,20 @@
+name: extract-text
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install UnityPy pillow gdown
+      - run: |
+          mkdir obb
+          gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb/obb.obb
+          gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O obb/apk.apk
+      - run: python extract_text.py obb/obb.obb obb/apk.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: text-files
+          path: text_out
