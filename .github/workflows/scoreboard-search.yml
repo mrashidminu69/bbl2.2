@@ -9,29 +9,20 @@ jobs:
 
     steps:
 
-      # 1. Repository checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
-      # 2. Required tools
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip wget grep
 
-
-      # 3. Download original APK
       - name: Download original APK
         run: |
-          wget -O original.apk \
-            "https://drive.usercontent.google.com/download?id=1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH&confirm=t"
-
-          echo "=== APK INFO ==="
+          wget -O original.apk "https://drive.usercontent.google.com/download?id=1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH&confirm=t"
+          echo "APK downloaded:"
           ls -lh original.apk
 
-
-      # 4. Extract IL2CPP files
       - name: Extract IL2CPP files
         run: |
           mkdir -p game
@@ -41,14 +32,13 @@ jobs:
             "assets/bin/Data/Managed/Metadata/global-metadata.dat" \
             -d game
 
-          echo "=== EXTRACTED FILES ==="
+          echo "Extracted files:"
           ls -lh game/
 
           test -f game/libil2cpp.so
           test -f game/global-metadata.dat
 
-
-            - name: Download Il2CppDumper
+      - name: Download Il2CppDumper
         run: |
           wget -O Il2CppDumper.zip \
             "https://github.com/Perfare/Il2CppDumper/releases/download/v6.7.46/Il2CppDumper-linux-x64.zip"
@@ -59,11 +49,9 @@ jobs:
 
           chmod +x Il2CppDumper/Il2CppDumper
 
-          echo "=== IL2CPP DUMPER FILES ==="
+          echo "Il2CppDumper files:"
           ls -lh Il2CppDumper/
 
-
-      # 6. Generate dump.cs
       - name: Generate dump.cs
         run: |
           mkdir -p dumpout
@@ -73,28 +61,19 @@ jobs:
             game/global-metadata.dat \
             dumpout
 
-          echo "=== DUMP OUTPUT ==="
+          echo "Dump files:"
           ls -lh dumpout/
 
           test -f dumpout/dump.cs
 
-
-      # 7. Search scoreboard classes
-      - name: Search scoreboard classes
+      - name: Search scoreboard
         run: |
-
           echo "========================================" > scoreboard-search.txt
           echo "       MATCH SCOREBOARD SEARCH" >> scoreboard-search.txt
           echo "========================================" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
-          echo "APK successfully dumped." >> scoreboard-search.txt
-          echo "" >> scoreboard-search.txt
-
-
-          echo "========================================" >> scoreboard-search.txt
-          echo "1. SCOREBOARD / HUD KEYWORDS" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
+          echo "### SCOREBOARD / HUD KEYWORDS ###" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -102,11 +81,8 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
-
           echo "" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
-          echo "2. POSSIBLE UI CLASSES" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
+          echo "### POSSIBLE UI CLASSES ###" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -114,11 +90,8 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
-
           echo "" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
-          echo "3. SCORE METHODS" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
+          echo "### SCORE METHODS ###" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -126,11 +99,8 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
-
           echo "" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
-          echo "4. RUN / WICKET / OVER REFERENCES" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
+          echo "### RUN / WICKET / OVER REFERENCES ###" >> scoreboard-search.txt
           echo "" >> scoreboard-search.txt
 
           grep -Ein \
@@ -138,24 +108,17 @@ jobs:
             dumpout/dump.cs \
             >> scoreboard-search.txt || true
 
-
           echo "" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
           echo "SEARCH COMPLETE" >> scoreboard-search.txt
-          echo "========================================" >> scoreboard-search.txt
 
-
-      # 8. Show result in Actions log
-      - name: Show scoreboard search result
+      - name: Show search result
         run: |
           echo "========================================"
-          echo "        SCOREBOARD SEARCH RESULT"
+          echo "       SCOREBOARD SEARCH RESULT"
           echo "========================================"
           cat scoreboard-search.txt
 
-
-      # 9. Upload results
-      - name: Upload scoreboard search
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: scoreboard-search
