@@ -1,0 +1,97 @@
+name: Find Match Scoreboard
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find-scoreboard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip wget grep
+
+      - name: Download original APK
+        run: |
+          wget -O original.apk \
+            "https://drive.usercontent.google.com/download?id=1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH&confirm=t"
+
+      - name: Extract IL2CPP files
+        run: |
+          mkdir -p game
+          unzip -j original.apk \
+            "lib/arm64-v8a/libil2cpp.so" \
+            "assets/bin/Data/Managed/Metadata/global-metadata.dat" \
+            -d game
+
+          mv game/libil2cpp.so game/libil2cpp.so
+          mv game/global-metadata.dat game/global-metadata.dat
+
+      - name: Download Il2CppDumper
+        run: |
+          wget -O Il2CppDumper.zip \
+            "https://github.com/Perfare/Il2CppDumper/releases/latest/download/Il2CppDumper-linux-x64.zip"
+
+          mkdir -p Il2CppDumper
+          unzip -q Il2CppDumper.zip -d Il2CppDumper
+          chmod +x Il2CppDumper/Il2CppDumper
+
+      - name: Generate dump.cs
+        run: |
+          mkdir -p dumpout
+
+          ./Il2CppDumper/Il2CppDumper \
+            game/libil2cpp.so \
+            game/global-metadata.dat \
+            dumpout || true
+
+      - name: Search scoreboard classes
+        run: |
+          echo "====================================" > scoreboard-search.txt
+          echo "        MATCH SCOREBOARD SEARCH" >> scoreboard-search.txt
+          echo "====================================" >> scoreboard-search.txt
+          echo "" >> scoreboard-search.txt
+
+          if [ ! -f dumpout/dump.cs ]; then
+            echo "ERROR: dump.cs was not generated." >> scoreboard-search.txt
+            exit 0
+          fi
+
+          echo "### SCOREBOARD / HUD KEYWORDS ###" >> scoreboard-search.txt
+          echo "" >> scoreboard-search.txt
+
+          grep -Ein \
+            "ScoreBoard|Scoreboard|Score|HUD|MatchUI|GameUI|MatchScore|ScoreUI|ScorePanel|ScoreText|Runs|Wickets|Overs|Batting|Bowling|Innings|Canvas|TextMeshPro|TMP_Text" \
+            dumpout/dump.cs \
+            >> scoreboard-search.txt || true
+
+          echo "" >> scoreboard-search.txt
+          echo "### POSSIBLE UI CLASSES ###" >> scoreboard-search.txt
+          echo "" >> scoreboard-search.txt
+
+          grep -Ein \
+            "class .*UI|class .*Hud|class .*HUD|class .*Score|class .*Match|class .*Canvas|class .*Panel" \
+            dumpout/dump.cs \
+            >> scoreboard-search.txt || true
+
+          echo "" >> scoreboard-search.txt
+          echo "### SCORE-RELATED METHODS ###" >> scoreboard-search.txt
+          echo "" >> scoreboard-search.txt
+
+          grep -Ein \
+            "SetScore|UpdateScore|UpdateRuns|SetRuns|UpdateWicket|SetWicket|UpdateOvers|SetOvers|UpdateScoreboard|SetScoreboard|RefreshScore|RefreshUI" \
+            dumpout/dump.cs \
+            >> scoreboard-search.txt || true
+
+      - name: Upload scoreboard search
+        uses: actions/upload-artifact@v4
+        with:
+          name: scoreboard-search
+          path: |
+            scoreboard-search.txt
+            dumpout/dump.cs
