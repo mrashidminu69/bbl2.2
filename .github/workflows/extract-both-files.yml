@@ -10,27 +10,54 @@ jobs:
           python-version: "3.11"
       - run: pip install gdown
 
-      - name: Download & Extract Both Asset Files
+      - name: Download & Raw Binary Patch & Extract
         run: |
-          mkdir input out
+          mkdir -p input out
           gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O input/original.obb
           gdown 1bVYc8GTYKo8wzFkh9vXqQyAuDDnFil3Y -O input/HUR_1.txt
           gdown 10TzP0U8tFzpCUR5NIilzAz90E_ZsckPe -O input/BBL_Bios_1.txt
-          
-          # Run safe patch python script
-          python safe_patch_all.py input/original.obb input/HUR_1.txt input/BBL_Bios_1.txt out/temp.obb
 
-          # Extract both modified container files from new OBB
           python -c '
-          import zipfile
-          with zipfile.ZipFile("out/temp.obb", "r") as z:
-              for item in z.infolist():
-                  if "182e001bae56bcb419267264cf896a7d" in item.filename:
-                      with open("out/182e001bae56bcb419267264cf896a7d", "wb") as f:
-                          f.write(z.read(item.filename))
-                  elif "301e2e6076b6de344a21203af8dac419" in item.filename:
-                      with open("out/301e2e6076b6de344a21203af8dac419", "wb") as f:
-                          f.write(z.read(item.filename))
+          import zipfile, os
+
+          obb_path = "input/original.obb"
+          hur_path = "input/HUR_1.txt"
+          bios_path = "input/BBL_Bios_1.txt"
+
+          HUR_HASH = "182e001bae56bcb419267264cf896a7d"
+          BIOS_HASH = "301e2e6076b6de344a21203af8dac419"
+
+          with open(hur_path, "rb") as f:
+              new_hur = f.read().strip()
+          with open(bios_path, "rb") as f:
+              new_bios = f.read().strip()
+
+          def raw_replace(orig_bytes, new_payload):
+              start_idx = orig_bytes.find(b"{\"")
+              if start_idx == -1:
+                  start_idx = orig_bytes.find(b"{")
+              if start_idx == -1:
+                  return orig_bytes
+              header = orig_bytes[:start_idx]
+              orig_len = len(orig_bytes) - start_idx
+              if len(new_payload) > orig_len:
+                  new_payload = new_payload[:orig_len]
+              padded = new_payload + (b" " * (orig_len - len(new_payload)))
+              return header + padded
+
+          with zipfile.ZipFile(obb_path, "r") as zin:
+              for item in zin.infolist():
+                  data = zin.read(item.filename)
+                  if HUR_HASH in item.filename or HUR_HASH.encode("utf-8") in data:
+                      patched = raw_replace(data, new_hur)
+                      with open(os.path.join("out", HUR_HASH), "wb") as f:
+                          f.write(patched)
+                      print("Patched HUR raw file successfully!")
+                  elif BIOS_HASH in item.filename or BIOS_HASH.encode("utf-8") in data:
+                      patched = raw_replace(data, new_bios)
+                      with open(os.path.join("out", BIOS_HASH), "wb") as f:
+                          f.write(patched)
+                      print("Patched BIOS raw file successfully!")
           '
 
       - uses: actions/upload-artifact@v4
