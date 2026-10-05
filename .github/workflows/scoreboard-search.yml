@@ -10,23 +10,34 @@ jobs:
     steps:
 
       # ==========================================
-      # 1. CHECKOUT
+      # 1. CHECKOUT REPOSITORY
       # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
 
       # ==========================================
-      # 2. INSTALL TOOLS
+      # 2. INSTALL BASIC TOOLS
       # ==========================================
       - name: Install tools
         run: |
+          set -e
+
           sudo apt-get update
-          sudo apt-get install -y unzip wget grep jq
+          sudo apt-get install -y unzip wget grep jq file
 
 
       # ==========================================
-      # 3. DOWNLOAD ORIGINAL APK
+      # 3. INSTALL .NET 6
+      # ==========================================
+      - name: Setup .NET 6
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+
+      # ==========================================
+      # 4. DOWNLOAD ORIGINAL APK
       # ==========================================
       - name: Download original APK
         run: |
@@ -35,14 +46,14 @@ jobs:
           wget -O original.apk \
             "https://drive.usercontent.google.com/download?id=1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH&confirm=t"
 
-          echo "=== APK ==="
+          echo "=== APK INFO ==="
           ls -lh original.apk
 
           test -s original.apk
 
 
       # ==========================================
-      # 4. EXTRACT IL2CPP FILES
+      # 5. EXTRACT IL2CPP FILES
       # ==========================================
       - name: Extract IL2CPP files
         run: |
@@ -55,7 +66,8 @@ jobs:
             "assets/bin/Data/Managed/Metadata/global-metadata.dat" \
             -d game
 
-          echo "=== EXTRACTED FILES ==="
+          echo ""
+          echo "=== EXTRACTED IL2CPP FILES ==="
           ls -lh game/
 
           test -f game/libil2cpp.so
@@ -63,64 +75,30 @@ jobs:
 
 
       # ==========================================
-      # 5. DOWNLOAD IL2CPPDUMPER
+      # 6. DOWNLOAD IL2CPPDUMPER .NET 6
       # ==========================================
       - name: Download Il2CppDumper
         run: |
           set -e
 
-          API="https://api.github.com/repos/Perfare/Il2CppDumper/releases/latest"
+          VERSION="v6.7.46"
 
-          echo "Getting latest Il2CppDumper release..."
+          URL="https://github.com/Perfare/Il2CppDumper/releases/download/${VERSION}/Il2CppDumper-net6-v6.7.46.zip"
 
-          wget -qO release.json "$API"
+          echo "Downloading:"
+          echo "$URL"
 
-          echo "=== RELEASE ==="
-          jq -r '.tag_name' release.json
-
-          echo "=== AVAILABLE ASSETS ==="
-          jq -r '.assets[].name' release.json
-
-          mkdir -p Il2CppDumper
-
-          # Find a Linux archive automatically.
-          ASSET_URL=$(jq -r '
-            .assets[]
-            | select(
-                (.name | ascii_downcase | contains("linux"))
-                and
-                (
-                  (.name | endswith(".zip"))
-                  or
-                  (.name | endswith(".tar.gz"))
-                )
-              )
-            | .browser_download_url
-          ' release.json | head -n 1)
-
-          if [ -z "$ASSET_URL" ]; then
-            echo ""
-            echo "ERROR: Linux Il2CppDumper asset was not found."
-            echo ""
-            echo "Available assets:"
-            jq -r '.assets[] | .name + " -> " + .browser_download_url' release.json
-            exit 1
-          fi
+          wget -O Il2CppDumper.zip "$URL"
 
           echo ""
-          echo "Selected asset:"
-          echo "$ASSET_URL"
-          echo ""
+          echo "=== DOWNLOADED DUMPER ==="
+          ls -lh Il2CppDumper.zip
 
-          wget -O dumper-package "$ASSET_URL"
-
-          echo "=== DOWNLOADED PACKAGE ==="
-          file dumper-package
-          ls -lh dumper-package
+          test -s Il2CppDumper.zip
 
 
       # ==========================================
-      # 6. EXTRACT IL2CPPDUMPER
+      # 7. EXTRACT IL2CPPDUMPER
       # ==========================================
       - name: Extract Il2CppDumper
         run: |
@@ -128,64 +106,46 @@ jobs:
 
           mkdir -p Il2CppDumper
 
-          if file dumper-package | grep -qi "Zip archive"; then
+          unzip -q Il2CppDumper.zip \
+            -d Il2CppDumper
 
-            echo "ZIP package detected."
-
-            unzip -q dumper-package \
-              -d Il2CppDumper
-
-          elif file dumper-package | grep -qi "gzip compressed"; then
-
-            echo "GZIP package detected."
-
-            tar -xzf dumper-package \
-              -C Il2CppDumper
-
-          else
-
-            echo "Unknown package format:"
-            file dumper-package
-
-            exit 1
-
-          fi
-
-          echo "=== DUMPER CONTENT ==="
+          echo ""
+          echo "=== IL2CPPDUMPER FILES ==="
           find Il2CppDumper -maxdepth 3 -type f -print
 
 
       # ==========================================
-      # 7. FIND DUMPER EXECUTABLE
+      # 8. FIND IL2CPPDUMPER DLL
       # ==========================================
-      - name: Locate Il2CppDumper executable
+      - name: Locate Il2CppDumper DLL
         run: |
           set -e
 
-          DUMPER=$(find Il2CppDumper \
+          DUMPER_DLL=$(find Il2CppDumper \
             -type f \
-            \( -name "Il2CppDumper" -o -name "Il2CppDumper.exe" \) \
+            -iname "Il2CppDumper.dll" \
             | head -n 1)
 
-          if [ -z "$DUMPER" ]; then
-            echo "ERROR: Il2CppDumper executable not found."
+          if [ -z "$DUMPER_DLL" ]; then
+            echo ""
+            echo "ERROR: Il2CppDumper.dll not found."
 
-            echo "Files found:"
-            find Il2CppDumper -type f
+            echo ""
+            echo "Files inside package:"
+            find Il2CppDumper -type f -print
 
             exit 1
           fi
 
-          echo "DUMPER=$DUMPER" >> "$GITHUB_ENV"
+          echo "DUMPER_DLL=$DUMPER_DLL" >> "$GITHUB_ENV"
 
-          chmod +x "$DUMPER" || true
-
-          echo "Using:"
-          echo "$DUMPER"
+          echo ""
+          echo "Using Il2CppDumper:"
+          echo "$DUMPER_DLL"
 
 
       # ==========================================
-      # 8. GENERATE DUMP
+      # 9. GENERATE DUMP.CS
       # ==========================================
       - name: Generate dump.cs
         run: |
@@ -193,15 +153,20 @@ jobs:
 
           mkdir -p dumpout
 
-          echo "Running Il2CppDumper..."
+          echo "========================================"
+          echo "       RUNNING IL2CPPDUMPER"
+          echo "========================================"
 
-          "$DUMPER" \
+          dotnet "$DUMPER_DLL" \
             game/libil2cpp.so \
             game/global-metadata.dat \
             dumpout
 
           echo ""
-          echo "=== DUMP OUTPUT ==="
+          echo "========================================"
+          echo "       DUMP OUTPUT"
+          echo "========================================"
+
           find dumpout -maxdepth 2 -type f -ls
 
           if [ ! -f dumpout/dump.cs ]; then
@@ -209,15 +174,18 @@ jobs:
             echo "ERROR: dump.cs was not generated."
 
             echo ""
-            echo "Dumper output:"
+            echo "Dump directory:"
             find dumpout -type f -print
 
             exit 1
           fi
 
+          echo ""
+          echo "SUCCESS: dump.cs generated."
+
 
       # ==========================================
-      # 9. SEARCH SCOREBOARD
+      # 10. SEARCH SCOREBOARD
       # ==========================================
       - name: Search scoreboard
         run: |
@@ -278,12 +246,24 @@ jobs:
 
           echo "" >> scoreboard-search.txt
           echo "========================================" >> scoreboard-search.txt
+          echo "5. UI TEXT / CANVAS REFERENCES" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
+          echo "" >> scoreboard-search.txt
+
+          grep -Ein \
+            "TextMeshPro|TMP_Text|Text|Canvas|RectTransform|GameObject|Image|RawImage|Slider" \
+            dumpout/dump.cs \
+            >> scoreboard-search.txt || true
+
+
+          echo "" >> scoreboard-search.txt
+          echo "========================================" >> scoreboard-search.txt
           echo "SEARCH COMPLETE" >> scoreboard-search.txt
           echo "========================================" >> scoreboard-search.txt
 
 
       # ==========================================
-      # 10. SHOW RESULT
+      # 11. SHOW RESULT
       # ==========================================
       - name: Show scoreboard result
         run: |
@@ -295,7 +275,7 @@ jobs:
 
 
       # ==========================================
-      # 11. UPLOAD RESULTS
+      # 12. UPLOAD RESULTS
       # ==========================================
       - name: Upload scoreboard results
         uses: actions/upload-artifact@v4
