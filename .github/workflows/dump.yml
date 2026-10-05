@@ -1,0 +1,27 @@
+name: dump-il2cpp
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install gdown
+      - run: |
+          gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O game.apk
+          mkdir apk dz dumpout
+          unzip -q game.apk -d apk
+      - run: gh release download -R Perfare/Il2CppDumper -D dz -p "*.zip"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: |
+          for z in dz/*.zip; do unzip -q -o "$z" -d "dz/$(basename "$z" .zip)"; done
+          DLL=$(find dz -name Il2CppDumper.dll | head -1)
+          echo "using $DLL"
+          echo 0 | DOTNET_ROLL_FORWARD=Major dotnet "$DLL" apk/lib/arm64-v8a/libil2cpp.so apk/assets/bin/Data/Managed/Metadata/global-metadata.dat dumpout || true
+          ls -lh dumpout
+      - uses: actions/upload-artifact@v4
+        with:
+          name: il2cpp-dump
+          path: dumpout
