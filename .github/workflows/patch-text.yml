@@ -1,0 +1,21 @@
+name: patch-text
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install UnityPy gdown
+      - run: |
+          mkdir texts
+          gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb.obb
+          gdown TEXTS_ZIP_ID -O texts.zip
+          unzip -q -j texts.zip -d texts
+      - run: python patch_text.py obb.obb texts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patched-text-files
+          path: out
