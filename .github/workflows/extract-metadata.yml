@@ -1,0 +1,21 @@
+name: extract-metadata
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install gdown
+      - run: |
+          mkdir work
+          gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O work/game.apk
+          unzip -q work/game.apk -d work/apk
+      - run: |
+          python extract_metadata.py work/apk/assets/bin/Data/Managed/Metadata/global-metadata.dat work/strings.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metadata-strings
+          path: work/strings.json
