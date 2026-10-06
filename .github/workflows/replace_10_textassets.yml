@@ -1,0 +1,135 @@
+name: Replace 10 OBB TextAssets
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  replace-textassets:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ==========================================
+      # PYTHON
+      # ==========================================
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+        with:
+          python-version: "3.11"
+
+
+      # ==========================================
+      # INSTALL UNITYPY + GDOWN
+      # ==========================================
+
+      - name: Install Python packages
+        run: |
+
+          python -m pip install --upgrade pip
+
+          pip install \
+            UnityPy \
+            gdown
+
+
+      # ==========================================
+      # DOWNLOAD ORIGINAL OBB
+      # ==========================================
+
+      - name: Download original OBB
+        run: |
+
+          mkdir -p input
+
+          gdown \
+            "1MGxpvepAchNFCzeqj8dFCZDAVclHJm38" \
+            -O input/original.obb
+
+          echo ""
+          echo "OBB:"
+          ls -lh input/original.obb
+
+          test -s input/original.obb
+
+
+      # ==========================================
+      # DOWNLOAD UPDATED TEXT ZIP
+      # ==========================================
+
+      - name: Download updated 12-player files
+        run: |
+
+          gdown \
+            "1DvtjXs0a9KFqs_lClEtb1xSQrWgzcym6" \
+            -O input/updated_text_12_players.zip
+
+          echo ""
+          echo "UPDATED ZIP:"
+          ls -lh input/updated_text_12_players.zip
+
+          test -s input/updated_text_12_players.zip
+
+
+      # ==========================================
+      # RUN PATCHER
+      # ==========================================
+
+      - name: Replace TextAssets inside hash files
+        run: |
+
+          python patch_textassets.py \
+            input/original.obb \
+            input/updated_text_12_players.zip
+
+
+      # ==========================================
+      # SHOW RESULT
+      # ==========================================
+
+      - name: Show final files
+        run: |
+
+          echo ""
+          echo "======================================"
+          echo "FINAL 10 FILES"
+          echo "======================================"
+
+          ls -lh updated_10_files/
+
+          echo ""
+          echo "======================================"
+          echo "FINAL ZIP"
+          echo "======================================"
+
+          ls -lh updated_10_textassets.zip
+
+          echo ""
+          echo "ZIP CONTENT:"
+          unzip -l updated_10_textassets.zip
+
+
+      # ==========================================
+      # UPLOAD ONLY 10 FILE ZIP
+      # ==========================================
+
+      - name: Upload updated 10 files
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: updated-10-textassets
+
+          path: updated_10_textassets.zip
+
+          if-no-files-found: error
