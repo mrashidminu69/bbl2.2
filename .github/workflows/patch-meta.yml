@@ -1,0 +1,28 @@
+name: patch-meta
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install UnityPy pillow gdown
+      - run: |
+          mkdir new
+          gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O game.apk
+          gdown 1sOgn7XVh6ONfeTbz9WRKBSu0GCjxqowI -O new.zip
+          unzip -q new.zip -d new
+      - run: python patch_apk.py game.apk new
+      - run: python patch_meta.py out/unsigned.apk out/unsigned2.apk
+      - run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/zipalign -p -f 4 out/unsigned2.apk out/aligned.apk
+          keytool -genkeypair -keystore ks.jks -alias k -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Mod"
+          $BT/apksigner sign --ks ks.jks --ks-pass pass:android --key-pass pass:android --out out/patched.apk out/aligned.apk
+          rm out/unsigned.apk out/unsigned2.apk out/aligned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patched-apk-meta
+          path: out
