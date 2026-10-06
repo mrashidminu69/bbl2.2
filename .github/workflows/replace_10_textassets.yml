@@ -72,7 +72,7 @@ jobs:
         run: |
 
           gdown \
-            "1DvtjXs0a9KFqs_lClEtb1xSQrWgzcym6" \
+            "15h2jw5xh98tr6eDCUobruPTntMxAywDX" \
             -O input/updated_text_12_players.zip
 
           echo ""
