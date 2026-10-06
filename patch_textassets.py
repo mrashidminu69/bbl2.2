@@ -244,11 +244,17 @@ def patch_one(filename, hash_name):
             else "unknown"
         )
 
-        # Preserve TextAsset structure.
-        # Only replace its actual script/text payload.
+        # ----------------------------------------------------
+        # FIX: Force the payload to be raw bytes.
+        # UnityPy expects m_Script to be bytes, not str.
+        # ----------------------------------------------------
 
-        data.m_Script = replacement_bytes
+        if isinstance(replacement_bytes, str):
+            data.m_Script = replacement_bytes.encode("utf-8")
+        else:
+            data.m_Script = replacement_bytes
 
+        # Save the modified TextAsset
         obj.save_typetree(data)
 
         changed += 1
