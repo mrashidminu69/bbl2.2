@@ -1,12 +1,5 @@
 import os, sys, json, struct
 
-# global-metadata.dat ka format (Unity IL2CPP)
-# Header: 0x00 - magic (0xFAB11BAF)
-# 0x08 - version
-# 0x10 - stringLiteralOffset
-# 0x14 - stringLiteralCount
-# ...
-
 src = sys.argv[1]   # global-metadata.dat
 out = sys.argv[2]   # output json
 
@@ -15,59 +8,82 @@ with open(src, "rb") as f:
 
 print("file size:", len(data))
 
-# magic check
 magic = struct.unpack_from("<I", data, 0)[0]
 print("magic: %#x" % magic)
 if magic != 0xFAB11BAF:
-    print("WARNING: magic mismatch — shayad ye global-metadata.dat nahi hai")
+    sys.exit("magic mismatch — ye global-metadata.dat nahi hai")
 
-# version
 version = struct.unpack_from("<i", data, 4)[0]
 print("version:", version)
 
-# string literal table ka offset aur size
-# IL2CPP metadata mein string literal table 0x10 par hoti hai (version ke hisaab se alag)
-# Aksar: 0x10 = stringLiteralOffset, 0x14 = stringLiteralCount (bytes)
-str_off = struct.unpack_from("<I", data, 0x10)[0]
-str_size = struct.unpack_from("<I", data, 0x14)[0]
+# version 24 ke liye header offsets
+# 0x08 = stringLiteralOffset (index table)
+# 0x0C = stringLiteralCount (kitne string literals)
+# 0x10 = stringLiteralDataOffset (asal text)
+# 0x14 = stringLiteralDataCount (kitne bytes)
+# 0x18 = stringOffset
+# 0x1C = stringCount
 
-print("string literal offset:", hex(str_off))
-print("string literal size:", str_size)
+lit_off = struct.unpack_from("<I", data, 0x08)[0]
+lit_count = struct.unpack_from("<i", data, 0x0C)[0]
+data_off = struct.unpack_from("<I", data, 0x10)[0]
+data_size = struct.unpack_from("<i", data, 0x14)[0]
+str_off = struct.unpack_from("<I", data, 0x18)[0]
+str_count = struct.unpack_from("<i", data, 0x1C)[0]
 
-# strings ko nikaalo
-# Har string: length (4 bytes) + UTF-8 bytes
+print("stringLiteralOffset: %#x" % lit_off)
+print("stringLiteralCount:", lit_count)
+print("stringLiteralDataOffset: %#x" % data_off)
+print("stringLiteralDataCount:", data_size)
+print("stringOffset: %#x" % str_off)
+print("stringCount:", str_count)
+
 strings = []
-pos = str_off
-end = str_off + str_size
-idx = 0
-while pos < end and pos + 4 <= len(data):
-    try:
+
+# --- 1) String literals: index table + data ---
+# index table: har entry 8 bytes (length + data offset)
+# data: asal UTF-8 text
+if lit_count > 0 and data_size > 0:
+    print("\n--- reading string literals ---")
+    for i in range(lit_count):
+        entry_off = lit_off + i * 8
+        if entry_off + 8 > len(data):
+            break
+        slen = struct.unpack_from("<i", data, entry_off)[0]
+        soff = struct.unpack_from("<I", data, entry_off + 4)[0]
+        abs_off = data_off + soff
+        if slen < 0 or slen > 100000 or abs_off + slen > len(data):
+            continue
+        s = data[abs_off:abs_off+slen].decode("utf-8", errors="replace")
+        strings.append({"kind": "literal", "index": i, "offset": abs_off, "length": slen, "value": s})
+
+# --- 2) Metadata strings: har entry 4 bytes (length) + text ---
+if str_count > 0:
+    print("\n--- reading metadata strings ---")
+    pos = str_off
+    for i in range(str_count):
+        if pos + 4 > len(data):
+            break
         slen = struct.unpack_from("<i", data, pos)[0]
         pos += 4
-        if slen < 0 or slen > 100000:
+        if slen < 0 or slen > 100000 or pos + slen > len(data):
             break
         s = data[pos:pos+slen].decode("utf-8", errors="replace")
-        strings.append({"index": idx, "offset": pos, "length": slen, "value": s})
+        strings.append({"kind": "meta", "index": i, "offset": pos, "length": slen, "value": s})
         pos += slen
-        idx += 1
-    except Exception as e:
-        print("stop at", pos, e)
-        break
 
-print("total strings:", len(strings))
+print("\ntotal strings:", len(strings))
 
-# JSON likho
-with open(out, "w", encoding="utf-8") as f:
-    json.dump({"version": version, "count": len(strings), "strings": strings}, f, ensure_ascii=False, indent=1)
-
-print("done:", out)
-
-# "HUR", "STR", "HEA" waghera dhoondo
+# --- 3) Team abbr check ---
 targets = ["HUR", "STR", "HEA", "REN", "STA", "SCO", "SIX", "THU"]
 print("\n--- team abbr check ---")
 for t in targets:
-    hits = [s for s in strings if s["value"] == t]
-    print(f"{t}: {len(hits)} exact match")
-    # partial bhi
+    exact = [s for s in strings if s["value"] == t]
     part = [s for s in strings if t in s["value"]]
-    print(f"   partial: {len(part)}")
+    print(f"{t}: exact={len(exact)} partial={len(part)}")
+
+# --- 4) JSON likho ---
+with open(out, "w", encoding="utf-8") as f:
+    json.dump({"version": version, "count": len(strings), "strings": strings}, f, ensure_ascii=False, indent=1)
+
+print("\ndone:", out)
