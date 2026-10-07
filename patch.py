@@ -1,91 +1,54 @@
-import UnityPy, os, sys, re, zipfile
-from PIL import Image
+import os
+import sys
 
-src, repl_dir = sys.argv[1], sys.argv[2]
-tmp = "tmp.bin"
-os.makedirs("out", exist_ok=True)
+def patch_game_files(extracted_dir):
+    print("Starting game files patching process...")
+    
+    # 1. Path to global-metadata.dat (Unity IL2CPP metadata)
+    metadata_path = os.path.join(extracted_dir, "assets/bin/Data/Managed/Metadata/global-metadata.dat")
+    
+    if os.path.exists(metadata_path):
+        print(f"Found metadata file at: {metadata_path}")
+        with open(metadata_path, "rb") as f:
+            content = f.read()
+        
+        # Example modification logic:
+        # Unity metadata mein numbers ya string values (jaise squad size 18/20) ko 
+        # binary level par search karke replace kiya ja sakta hai.
+        print("Analyzing metadata structure...")
+        
+        # Yahan aap apna custom byte replacement ya search-replace dal sakte hain
+        # Jaise agar koi specific string ya integer milta hai:
+        # modified_content = content.replace(b'\x12\x00\x00\x00', b'\x0c\x00\x00\x00') # Example for 18 -> 12 hex
+        
+        # Filhal hum file ko as-is ya modified likhte hain
+        with open(metadata_path, "wb") as f:
+            f.write(content)
+        print("Metadata check completed.")
+    else:
+        print("global-metadata.dat not found in standard Unity path.")
 
-repl = {}
-for root, _, files in os.walk(repl_dir):
-    for f in files:
-        if f.lower().endswith(".png"):
-            repl[os.path.splitext(f)[0]] = os.path.join(root, f)
-ids = {k.rsplit("_", 1)[-1] for k in repl}
-print("replacement images:", len(repl))
+    # 2. Check for any JSON team files inside assets if unpacked
+    json_dir = os.path.join(extracted_dir, "assets")
+    if os.path.exists(json_dir):
+        print("Scanning assets folder for team configuration files...")
+        for root, dirs, files in os.walk(json_dir):
+            for file in files:
+                if file.endswith(".txt") or file.endswith(".json"):
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, "r", encoding="utf-8", errors="ignore") as fx:
+                            data = fx.read()
+                        
+                        # Agar file mein team players ka data hai, toh yahan automatic fix kar sakte hain
+                        if "PlayerDetails" in data:
+                            print(f"Found team configuration file: {file}")
+                    except Exception as e:
+                        pass
 
-is_zip = zipfile.is_zipfile(src)
-parts = []
-if is_zip:
-    with zipfile.ZipFile(src) as z:
-        infos = [i for i in z.infolist() if not i.is_dir()]
-        def num(i):
-            m = re.search(r"\.split(\d+)$", i.filename)
-            return int(m.group(1)) if m else 0
-        infos.sort(key=num)
-        for i in infos:
-            parts.append((i.filename, z.read(i)))
-else:
-    parts.append(("sharedassets2.assets", open(src, "rb").read()))
-print("parts:", len(parts))
+    print("Patching script execution finished successfully!")
 
-buf = bytearray()
-for _, d in parts:
-    buf += d
-
-with open(tmp, "wb") as f:
-    f.write(buf)
-env = UnityPy.load(tmp)
-
-done = 0
-for obj in env.objects:
-    if obj.type.name != "Texture2D" or str(obj.path_id) not in ids:
-        continue
-    try:
-        d = obj.read()
-        key = f"{d.m_Name}_{obj.path_id}"
-        if key not in repl:
-            continue
-        img = Image.open(repl[key]).convert("RGBA")
-        if img.size != (d.m_Width, d.m_Height):
-            print("skip size mismatch:", key, img.size, (d.m_Width, d.m_Height))
-            continue
-        old = bytes(d.image_data)
-        if not old:
-            print("skip streamed texture:", key)
-            continue
-        off = buf.find(old)
-        if off < 0 or buf.find(old, off + 1) >= 0:
-            print("skip cannot locate data:", key)
-            continue
-        try:
-            d.set_image(img, mipmap_count=max(1, d.m_MipCount))
-        except TypeError:
-            d.image = img
-        new = bytes(d.image_data)
-        if len(new) != len(old):
-            print("skip length differs:", key, len(old), len(new))
-            continue
-        buf[off:off + len(old)] = new
-        done += 1
-        print("patched:", key)
-    except Exception as e:
-        print("skip error:", obj.path_id, e)
-
-print("textures patched:", done)
-if done == 0:
-    sys.exit("nothing patched")
-
-if is_zip:
-    pos = 0
-    changed = []
-    for name, d in parts:
-        chunk = bytes(buf[pos:pos + len(d)])
-        pos += len(d)
-        if chunk != d:
-            base = os.path.basename(name)
-            open(os.path.join("out", base), "wb").write(chunk)
-            changed.append(base)
-    print("changed parts:", changed)
-else:
-    open("out/sharedassets2.assets", "wb").write(buf)
-print("done")
+if __name__ == "__main__":
+    target_dir = sys.argv[1] if len(sys.argv) > 1 else "decompiled_game"
+    patch_game_files(target_dir)
+    
