@@ -3,7 +3,14 @@ import UnityPy, os, sys, re, zipfile, json
 obb, texts_dir = sys.argv[1], sys.argv[2]
 
 TARGETS = [
+    ("4221df6f0f151fd4da6bd0ee35123a9b", "STR", "STR_1.txt"),
+    ("a1d3846bf78a02641ba348f297151d28", "HEA", "HEA_1.txt"),
     ("182e001bae56bcb419267264cf896a7d", "HUR", "HUR_1.txt"),
+    ("e55a407938058bf4d857737a7afc799e", "REN", "REN_1.txt"),
+    ("5c887408a240d4a4d8e082224069f7be", "STA", "STA_1.txt"),
+    ("44f1cd3b5ddb7ea4b91222fc5dfa1f50", "SCO", "SCO_1.txt"),
+    ("2b644b239c6b4664a901147443afeab1", "SIX", "SIX_1.txt"),
+    ("80f3f9fb8e627ad4ea01753dc148d016", "THU", "THU_1.txt"),
     ("301e2e6076b6de344a21203af8dac419", "BBL_Bios", "BBL_Bios_1.txt"),
     ("d21c07ca7e62f4e49937026c09a03fc0", "BBLTeam", "BBLTeam_1.txt"),
 ]
@@ -21,7 +28,6 @@ def find(base):
             res.append((int(m.group(3) or 0), i))
     return [i for _, i in sorted(res, key=lambda x: x[0])]
 
-replaced = {}
 failed = False
 for base, tname, fname in TARGETS:
     parts = find(base)
@@ -37,7 +43,8 @@ for base, tname, fname in TARGETS:
     print("   container size:", len(buf), "| starts with:", bytes(buf[:8]))
     tmp = "tmp_" + base
     open(tmp, "wb").write(buf)
-    old = None
+
+    env, ta, old = None, None, None
     try:
         env = UnityPy.load(tmp)
         for obj in env.objects:
@@ -46,6 +53,7 @@ for base, tname, fname in TARGETS:
                 if d.m_Name == tname:
                     raw = d.m_Script
                     old = raw.encode("utf-8", "surrogateescape") if isinstance(raw, str) else bytes(raw)
+                    ta = obj
                     break
     except Exception as e:
         print("   UnityPy could not read container:", e)
@@ -53,47 +61,60 @@ for base, tname, fname in TARGETS:
         print("   TextAsset not found")
         failed = True
         continue
-    new = open(os.path.join(texts_dir, fname), "rb").read()
+
+    newp = os.path.join(texts_dir, fname)
+    if not os.path.exists(newp):
+        print("   MISSING new file in zip:", fname)
+        failed = True
+        continue
+    new = open(newp, "rb").read()
     if new.startswith(b"\xef\xbb\xbf") and not old.startswith(b"\xef\xbb\xbf"):
         new = new[3:]
-    if len(new) > len(old):
-        try:
+    try:
+        json.loads(new.decode("utf-8"))
+    except Exception as e:
+        print("   new file is not valid json:", e)
+        failed = True
+        continue
+
+    chunks = None
+    off = buf.find(old)
+    if off >= 0 and buf.find(old, off + 1) < 0:
+        if len(new) > len(old):
             new = json.dumps(json.loads(new.decode("utf-8")), ensure_ascii=False,
                              separators=(",", ":")).encode("utf-8")
-        except Exception as e:
-            print("   bad json:", e)
+        if len(new) > len(old):
+            print("   NEW TEXT TOO LONG:", len(new), ">", len(old))
             failed = True
             continue
-    if len(new) > len(old):
-        print("   NEW TEXT TOO LONG:", len(new), ">", len(old))
+        used = len(new)
+        new = new + b" " * (len(old) - len(new))
+        buf[off:off + len(old)] = new
+        pos, chunks = 0, {}
+        for p, sz in zip(parts, sizes):
+            chunks[p.filename] = bytes(buf[pos:pos + sz])
+            pos += sz
+        print("   patched in place: old", len(old), "| new", used, "+ padding")
+    elif len(parts) == 1:
+        try:
+            tree = ta.read_typetree()
+            tree["m_Script"] = new.decode("utf-8")
+            ta.save_typetree(tree)
+            chunks = {parts[0].filename: env.file.save()}
+            print("   text was not plain bytes, container re-saved with UnityPy")
+        except Exception as e:
+            print("   re-save failed:", e)
+            failed = True
+            continue
+    else:
+        print("   cannot patch: text not found as plain bytes in split container")
         failed = True
         continue
-    used = len(new)
-    new = new + b" " * (len(old) - len(new))
-    off = buf.find(old)
-    if off < 0 or buf.find(old, off + 1) >= 0:
-        print("   original text not found as plain bytes in container (compressed?)")
-        failed = True
-        continue
-    buf[off:off + len(old)] = new
-    print("   patched: old", len(old), "bytes | new text", used, "bytes + padding")
-    pos = 0
-    for p, sz in zip(parts, sizes):
-        chunk = bytes(buf[pos:pos + sz])
-        pos += sz
-        replaced[p.filename] = chunk
-        open(os.path.join("out", os.path.basename(p.filename)), "wb").write(chunk)
-        print("   wrote", os.path.basename(p.filename), "| OBB path:", p.filename)
+
+    for name, data in chunks.items():
+        open(os.path.join("out", os.path.basename(name)), "wb").write(data)
+        print("   wrote", os.path.basename(name), "| OBB path:", name)
 
 if failed:
     sys.exit("some files failed, see above")
-
-with zipfile.ZipFile("out/main.13.com.nextwave.bigbash.obb", "w") as zo:
-    for i in infos:
-        data = replaced.get(i.filename)
-        if data is None:
-            data = z.read(i)
-        zi = zipfile.ZipInfo(i.filename, i.date_time)
-        zi.compress_type = i.compress_type
-        zo.writestr(zi, data)
-print("done: 3 files + full obb written")
+print("done: 10 files written")
