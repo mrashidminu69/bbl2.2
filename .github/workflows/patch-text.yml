@@ -12,7 +12,7 @@ jobs:
       - run: |
           mkdir texts
           gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb.obb
-          gdown 1RfljuYiWVzWOieV3IV1NQ-O1T6EAqI_8 -O texts.zip
+          gdown 15h2jw5xh98tr6eDCUobruPTntMxAywDX -O texts.zip
           unzip -q -j texts.zip -d texts
           ls -l texts
       - run: python patch_text.py obb.obb texts
