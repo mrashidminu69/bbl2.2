@@ -12,7 +12,7 @@ jobs:
       - run: |
           mkdir new texts
           gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O game.apk
-          gdown 1sOgn7XVh6ONfeTbz9WRKBSu0GCjxqowI -O logos.zip
+          gdown 1svbMaBv5WQ3BgP5-25prXlD5-nStqLV6 -O logos.zip
           unzip -q logos.zip -d new
           gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb.obb
           gdown 1u8cPPQXqCAruTxhOB6kWNQtX1pTQNiTJ -O texts.zip
