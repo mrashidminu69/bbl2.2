@@ -1,4 +1,4 @@
-name: patch-text
+name: build-all
 on: workflow_dispatch
 jobs:
   run:
@@ -8,15 +8,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install UnityPy gdown
+      - run: pip install UnityPy pillow gdown
       - run: |
-          mkdir texts
+          mkdir new texts
+          gdown 1jnefeyVzWWbci0Dx68tsQJtLHK9qHxZH -O game.apk
+          gdown 1sOgn7XVh6ONfeTbz9WRKBSu0GCjxqowI -O logos.zip
+          unzip -q logos.zip -d new
           gdown 1MGxpvepAchNFCzeqj8dFCZDAVclHJm38 -O obb.obb
-          gdown 1hn5cj5nbPzkEbr7GapjYPYrN_SiZ2ANW -O texts.zip
+          gdown 1u8cPPQXqCAruTxhOB6kWNQtX1pTQNiTJ -O texts.zip
           unzip -q -j texts.zip -d texts
-          ls -l texts
+      - run: python patch_apk.py game.apk new
       - run: python patch_text.py obb.obb texts
+      - run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/zipalign -p -f 4 out/unsigned.apk out/aligned.apk
+          keytool -genkeypair -keystore ks.jks -alias k -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Mod"
+          $BT/apksigner sign --ks ks.jks --ks-pass pass:android --key-pass pass:android --out out/patched.apk out/aligned.apk
+          rm out/unsigned.apk out/aligned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: patched-text-files
+          name: all-in-one
           path: out
